@@ -30,14 +30,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: 'go.mod'
-          cache: true
-
       - name: Fetch secrets from Vault
-        uses: QumulusTechnology/vault-setup-action@v2
+        uses: QumulusTechnology/vault-setup-action@v3
         with:
           aws_account_data: ${{ secrets.AWS_ACCOUNT_DATA }}
           vault_addr: ${{ secrets.VAULT_ADDR }}
@@ -46,10 +40,28 @@ jobs:
             secret/data/qcp/global/automation-user-gpg-key private-key | GPG_PRIVATE_KEY;
             secret/data/qcp/global/automation-user-gpg-key public-key | GPG_PUBLIC_KEY;
             secret/data/qcp/global/automation-user-github-token token | GITHUB_ACCESS_TOKEN;
+            secret/data/qcp/global/github-automation-user-ssh-key private_key | SSH_PRIVATE_KEY;
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
 
       - name: Configure Git for private modules
         run: |
-          git config --global url."https://${GITHUB_ACCESS_TOKEN}@github.com/".insteadOf "https://github.com/"
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+        env:
+          GOPRIVATE: github.com/QumulusTechnology/*
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+        env:
+          GOPRIVATE: github.com/QumulusTechnology/*
 
       - name: Verify secrets were fetched
         run: |
@@ -117,6 +129,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          GOPRIVATE: github.com/QumulusTechnology/*
 
       - name: Run GoReleaser (Actual Release)
         if: github.event.inputs.dry_run == 'false'
@@ -127,6 +140,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          GOPRIVATE: github.com/QumulusTechnology/*
 
       - name: List generated artifacts
         run: |
