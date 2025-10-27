@@ -52,7 +52,13 @@ jobs:
 
       - name: Configure Git for private modules
         run: |
+          # Add GitHub to known_hosts to avoid SSH prompts
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          # Configure Git to use SSH instead of HTTPS
           git config --global url."git@github.com:".insteadOf "https://github.com/"
+        env:
+          GOPRIVATE: github.com/QumulusTechnology/*
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6.3.0
@@ -70,6 +76,7 @@ jobs:
           # GitHub sets the GITHUB_TOKEN secret automatically.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          GOPRIVATE: github.com/QumulusTechnology/*
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
