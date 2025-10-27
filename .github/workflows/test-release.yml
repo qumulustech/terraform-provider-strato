@@ -1,0 +1,173 @@
+# Test Release Workflow
+# This workflow can be triggered manually to test the release process
+# without creating an actual release tag.
+name: Test Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no actual release)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  test-goreleaser:
+    runs-on:
+      group: prod
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Fetch GPG keys from Vault
+        uses: QumulusTechnology/vault-setup-action@v2
+        with:
+          aws_account_data: ${{ secrets.AWS_ACCOUNT_DATA }}
+          vault_addr: ${{ secrets.VAULT_ADDR }}
+          platform: qcp
+          secrets: |
+            secret/data/qcp/global/automation-user-gpg-key private-key | GPG_PRIVATE_KEY;
+            secret/data/qcp/global/automation-user-gpg-key public-key | GPG_PUBLIC_KEY;
+
+      - name: Verify GPG key was fetched
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "❌ ERROR: GPG_PRIVATE_KEY is empty"
+            exit 1
+          else
+            echo "✅ GPG_PRIVATE_KEY fetched successfully"
+            echo "Key length: ${#GPG_PRIVATE_KEY} characters"
+          fi
+
+          if [ -z "$GPG_PUBLIC_KEY" ]; then
+            echo "❌ ERROR: GPG_PUBLIC_KEY is empty"
+            exit 1
+          else
+            echo "✅ GPG_PUBLIC_KEY fetched successfully"
+            echo "Key length: ${#GPG_PUBLIC_KEY} characters"
+          fi
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6.3.0
+        id: import_gpg
+        with:
+          gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}
+          passphrase: ''
+
+      - name: Verify GPG import
+        run: |
+          echo "✅ GPG key imported successfully"
+          echo "Fingerprint: ${{ steps.import_gpg.outputs.fingerprint }}"
+          echo "Key ID: ${{ steps.import_gpg.outputs.keyid }}"
+          echo "Name: ${{ steps.import_gpg.outputs.name }}"
+          echo "Email: ${{ steps.import_gpg.outputs.email }}"
+
+          # List GPG keys
+          echo ""
+          echo "Available GPG keys:"
+          gpg --list-secret-keys --keyid-format=long
+
+      - name: Create temporary tag for testing
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          # Create a temporary tag for testing
+          TEST_TAG="v0.0.0-test-$(date +%s)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TEST_TAG" -m "Test release tag"
+          echo "TEST_TAG=$TEST_TAG" >> $GITHUB_ENV
+          echo "Created test tag: $TEST_TAG"
+
+      - name: Run GoReleaser (Snapshot/Dry-run)
+        if: github.event.inputs.dry_run == 'true'
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        with:
+          version: latest
+          args: release --snapshot --clean --skip=publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+
+      - name: Run GoReleaser (Actual Release)
+        if: github.event.inputs.dry_run == 'false'
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+
+      - name: List generated artifacts
+        run: |
+          echo "📦 Generated artifacts:"
+          ls -lah dist/ || echo "No dist directory found"
+
+          echo ""
+          echo "📋 Checksums file:"
+          find dist/ -name "*SHA256SUMS" -exec cat {} \; || echo "No checksums file found"
+
+          echo ""
+          echo "🔐 Signature file:"
+          find dist/ -name "*SHA256SUMS.sig" -exec ls -lh {} \; || echo "No signature file found"
+
+      - name: Verify signature
+        run: |
+          SUMS_FILE=$(find dist/ -name "*SHA256SUMS" | head -n 1)
+          SIG_FILE=$(find dist/ -name "*SHA256SUMS.sig" | head -n 1)
+
+          if [ -f "$SUMS_FILE" ] && [ -f "$SIG_FILE" ]; then
+            echo "Verifying GPG signature..."
+            gpg --verify "$SIG_FILE" "$SUMS_FILE"
+            if [ $? -eq 0 ]; then
+              echo "✅ Signature verification successful!"
+            else
+              echo "❌ Signature verification failed!"
+              exit 1
+            fi
+          else
+            echo "⚠️  Checksums or signature file not found"
+            exit 1
+          fi
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-release-artifacts
+          path: dist/
+          retention-days: 7
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "## 🧪 Test Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run Mode**: ${{ github.event.inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPG Fingerprint**: ${{ steps.import_gpg.outputs.fingerprint }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPG Key ID**: ${{ steps.import_gpg.outputs.keyid }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -d "dist" ]; then
+            echo "### 📦 Generated Artifacts:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            ls -lh dist/ >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
