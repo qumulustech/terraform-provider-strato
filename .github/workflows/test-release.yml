@@ -36,7 +36,7 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Fetch GPG keys from Vault
+      - name: Fetch secrets from Vault
         uses: QumulusTechnology/vault-setup-action@v2
         with:
           aws_account_data: ${{ secrets.AWS_ACCOUNT_DATA }}
@@ -45,8 +45,13 @@ jobs:
           secrets: |
             secret/data/qcp/global/automation-user-gpg-key private-key | GPG_PRIVATE_KEY;
             secret/data/qcp/global/automation-user-gpg-key public-key | GPG_PUBLIC_KEY;
+            secret/data/qcp/global/automation-user-github-token token | GITHUB_ACCESS_TOKEN;
 
-      - name: Verify GPG key was fetched
+      - name: Configure Git for private modules
+        run: |
+          git config --global url."https://${GITHUB_ACCESS_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Verify secrets were fetched
         run: |
           if [ -z "$GPG_PRIVATE_KEY" ]; then
             echo "❌ ERROR: GPG_PRIVATE_KEY is empty"
@@ -62,6 +67,14 @@ jobs:
           else
             echo "✅ GPG_PUBLIC_KEY fetched successfully"
             echo "Key length: ${#GPG_PUBLIC_KEY} characters"
+          fi
+
+          if [ -z "$GITHUB_ACCESS_TOKEN" ]; then
+            echo "❌ ERROR: GITHUB_ACCESS_TOKEN is empty"
+            exit 1
+          else
+            echo "✅ GITHUB_ACCESS_TOKEN fetched successfully"
+            echo "Token length: ${#GITHUB_ACCESS_TOKEN} characters"
           fi
 
       - name: Import GPG key

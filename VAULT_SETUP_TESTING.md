@@ -13,12 +13,17 @@ This document explains the Vault-integrated release automation setup and how to 
 - ✅ Fetches both `private-key` and `public-key` from `secret/data/qcp/global/automation-user-gpg-key`
 - ✅ Removed dependency on GitHub Secrets for GPG keys (now uses Vault)
 
-**Vault Path:**
+**Vault Paths:**
 ```
 secret/data/qcp/global/automation-user-gpg-key
 ├── private-key  → GPG_PRIVATE_KEY
 └── public-key   → GPG_PUBLIC_KEY
+
+secret/data/qcp/global/automation-user-github-token
+└── token        → GITHUB_ACCESS_TOKEN
 ```
+
+**Note:** The GitHub token is required to access the private `strato-project` dependency.
 
 ### 2. Created Test Workflow ([.github/workflows/test-release.yml](.github/workflows/test-release.yml))
 

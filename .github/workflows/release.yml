@@ -33,7 +33,7 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Fetch GPG keys from Vault
+      - name: Fetch secrets from Vault
         uses: QumulusTechnology/vault-setup-action@v2
         with:
           aws_account_data: ${{ secrets.AWS_ACCOUNT_DATA }}
@@ -42,6 +42,11 @@ jobs:
           secrets: |
             secret/data/qcp/global/automation-user-gpg-key private-key | GPG_PRIVATE_KEY;
             secret/data/qcp/global/automation-user-gpg-key public-key | GPG_PUBLIC_KEY;
+            secret/data/qcp/global/automation-user-github-token token | GITHUB_ACCESS_TOKEN;
+
+      - name: Configure Git for private modules
+        run: |
+          git config --global url."https://${GITHUB_ACCESS_TOKEN}@github.com/".insteadOf "https://github.com/"
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6.3.0
