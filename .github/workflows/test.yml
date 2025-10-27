@@ -20,7 +20,8 @@ jobs:
   # Ensure project builds before running testing matrix
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on:
+      group: prod
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -62,7 +63,8 @@ jobs:
           version: latest
 
   generate:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: prod
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
@@ -108,7 +110,8 @@ jobs:
   test:
     name: Terraform Provider Acceptance Tests
     needs: build
-    runs-on: ubuntu-latest
+    runs-on:
+      group: prod
     timeout-minutes: 15
     strategy:
       fail-fast: false
