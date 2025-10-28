@@ -43,7 +43,7 @@ jobs:
       #       secret/data/qcp/global/github-automation-user-ssh-key private_key | SSH_PRIVATE_KEY;
 
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.9.1
         with:
           # TEMPORARY: Using repository secret directly (OLD: ${{ env.SSH_PRIVATE_KEY }})
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -59,7 +59,7 @@ jobs:
           GOPRIVATE: github.com/QumulusTechnology/*
 
       - name: Set up Go
-        uses: actions/setup-go@v5 # v5.5.0
+        uses: actions/setup-go@v6 # v5.5.0
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -86,7 +86,7 @@ jobs:
           GOPRIVATE: github.com/QumulusTechnology/*
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: release-artifacts
