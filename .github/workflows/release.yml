@@ -17,8 +17,10 @@ permissions:
 
 jobs:
   goreleaser:
-    runs-on:
-      group: prod
+    # TEMPORARY: Removed group: prod - uncomment to restore
+    # runs-on:
+    #   group: prod
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -27,22 +29,24 @@ jobs:
           # Allow goreleaser to access older tag information.
           fetch-depth: 0
 
-      - name: Fetch secrets from Vault
-        uses: QumulusTechnology/vault-setup-action@v3
-        with:
-          aws_account_data: ${{ secrets.AWS_ACCOUNT_DATA }}
-          vault_addr: ${{ secrets.VAULT_ADDR }}
-          platform: qcp
-          secrets: |
-            secret/data/qcp/global/automation-user-gpg-key private-key | GPG_PRIVATE_KEY;
-            secret/data/qcp/global/automation-user-gpg-key public-key | GPG_PUBLIC_KEY;
-            secret/data/qcp/global/automation-user-github-token token | GITHUB_ACCESS_TOKEN;
-            secret/data/qcp/global/github-automation-user-ssh-key private_key | SSH_PRIVATE_KEY;
+      # TEMPORARY: Using repository secrets instead of Vault - uncomment below to restore Vault
+      # - name: Fetch secrets from Vault
+      #   uses: QumulusTechnology/vault-setup-action@v3
+      #   with:
+      #     aws_account_data: ${{ secrets.AWS_ACCOUNT_DATA }}
+      #     vault_addr: ${{ secrets.VAULT_ADDR }}
+      #     platform: qcp
+      #     secrets: |
+      #       secret/data/qcp/global/automation-user-gpg-key private-key | GPG_PRIVATE_KEY;
+      #       secret/data/qcp/global/automation-user-gpg-key public-key | GPG_PUBLIC_KEY;
+      #       secret/data/qcp/global/automation-user-github-token token | GITHUB_ACCESS_TOKEN;
+      #       secret/data/qcp/global/github-automation-user-ssh-key private_key | SSH_PRIVATE_KEY;
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          # TEMPORARY: Using repository secret directly (OLD: ${{ env.SSH_PRIVATE_KEY }})
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Configure Git for private modules
         run: |
@@ -66,7 +70,8 @@ jobs:
         uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6.3.0
         id: import_gpg
         with:
-          gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}
+          # TEMPORARY: Using repository secret directly (OLD: ${{ env.GPG_PRIVATE_KEY }})
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ''
 
       - name: Run GoReleaser

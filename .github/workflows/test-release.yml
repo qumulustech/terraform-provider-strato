@@ -21,31 +21,35 @@ permissions:
 
 jobs:
   test-goreleaser:
-    runs-on:
-      group: prod
+    # TEMPORARY: Removed group: prod - uncomment to restore
+    # runs-on:
+    #   group: prod
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@v5 # v5.0.0
         with:
           fetch-depth: 0
 
-      - name: Fetch secrets from Vault
-        uses: QumulusTechnology/vault-setup-action@v3
-        with:
-          aws_account_data: ${{ secrets.AWS_ACCOUNT_DATA }}
-          vault_addr: ${{ secrets.VAULT_ADDR }}
-          platform: qcp
-          secrets: |
-            secret/data/qcp/global/automation-user-gpg-key private-key | GPG_PRIVATE_KEY;
-            secret/data/qcp/global/automation-user-gpg-key public-key | GPG_PUBLIC_KEY;
-            secret/data/qcp/global/automation-user-github-token token | GITHUB_ACCESS_TOKEN;
-            secret/data/qcp/global/github-automation-user-ssh-key private_key | SSH_PRIVATE_KEY;
+      # TEMPORARY: Using repository secrets instead of Vault - uncomment below to restore Vault
+      # - name: Fetch secrets from Vault
+      #   uses: QumulusTechnology/vault-setup-action@v3
+      #   with:
+      #     aws_account_data: ${{ secrets.AWS_ACCOUNT_DATA }}
+      #     vault_addr: ${{ secrets.VAULT_ADDR }}
+      #     platform: qcp
+      #     secrets: |
+      #       secret/data/qcp/global/automation-user-gpg-key private-key | GPG_PRIVATE_KEY;
+      #       secret/data/qcp/global/automation-user-gpg-key public-key | GPG_PUBLIC_KEY;
+      #       secret/data/qcp/global/automation-user-github-token token | GITHUB_ACCESS_TOKEN;
+      #       secret/data/qcp/global/github-automation-user-ssh-key private_key | SSH_PRIVATE_KEY;
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          # TEMPORARY: Using repository secret directly (OLD: ${{ env.SSH_PRIVATE_KEY }})
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Configure Git for private modules
         run: |
@@ -56,16 +60,17 @@ jobs:
           GOPRIVATE: github.com/QumulusTechnology/*
 
       - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        uses: actions/setup-go@v5 # v5.5.0
         with:
           go-version-file: 'go.mod'
           cache: true
         env:
           GOPRIVATE: github.com/QumulusTechnology/*
 
+      # TEMPORARY: Updated to use repository secrets - restore when reverting to Vault
       - name: Verify secrets were fetched
         run: |
-          if [ -z "$GPG_PRIVATE_KEY" ]; then
+          if [ -z "${{ secrets.GPG_PRIVATE_KEY }}" ]; then
             echo "❌ ERROR: GPG_PRIVATE_KEY is empty"
             exit 1
           else
@@ -73,27 +78,28 @@ jobs:
             echo "Key length: ${#GPG_PRIVATE_KEY} characters"
           fi
 
-          if [ -z "$GPG_PUBLIC_KEY" ]; then
+          if [ -z "${{ secrets.GPG_PUBLIC_KEY }}" ]; then
             echo "❌ ERROR: GPG_PUBLIC_KEY is empty"
             exit 1
           else
             echo "✅ GPG_PUBLIC_KEY fetched successfully"
-            echo "Key length: ${#GPG_PUBLIC_KEY} characters"
           fi
 
-          if [ -z "$GITHUB_ACCESS_TOKEN" ]; then
-            echo "❌ ERROR: GITHUB_ACCESS_TOKEN is empty"
+          if [ -z "${{ secrets.GH_ACCESS_TOKEN }}" ]; then
+            echo "❌ ERROR: GH_ACCESS_TOKEN is empty"
             exit 1
           else
-            echo "✅ GITHUB_ACCESS_TOKEN fetched successfully"
-            echo "Token length: ${#GITHUB_ACCESS_TOKEN} characters"
+            echo "✅ GH_ACCESS_TOKEN fetched successfully"
           fi
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6.3.0
         id: import_gpg
         with:
-          gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}
+          # TEMPORARY: Using repository secret directly (OLD: ${{ env.GPG_PRIVATE_KEY }})
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ''
 
       - name: Verify GPG import
