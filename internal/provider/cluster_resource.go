@@ -511,8 +511,8 @@ func (r *ClusterResource) ImportState(ctx context.Context, req resource.ImportSt
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// calculateRetryAttempts calculates the number of retry attempts based on node count
-// Provides 10 minutes for small clusters (≤3 nodes), 20 minutes for larger clusters
+// calculateRetryAttempts calculates the number of retry attempts based on node count.
+// Provides 10 minutes for small clusters (≤3 nodes), 20 minutes for larger clusters.
 func calculateRetryAttempts(nodeCount int64) uint {
 	// Base: 10 minutes = 60 attempts × 10 seconds
 	baseAttempts := uint(60)
