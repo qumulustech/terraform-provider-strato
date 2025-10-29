@@ -220,6 +220,7 @@ func (r *ClusterResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	// Can skip Authorization header since its handled by client options in provider configuration
+	// But we must set X-OS-Cluster-ID and X-OS-Project-ID headers via params
 	params := &sdk.CreateClusterParams{
 		XOSClusterID: data.ClusterId.ValueString(),
 		XOSProjectID: data.ProjectId.ValueString(),
@@ -261,13 +262,21 @@ func (r *ClusterResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 	if createResult.StatusCode() != 200 {
-		resp.Diagnostics.AddError("Unable to create cluster", fmt.Sprintf("http response status code: %d", createResult.StatusCode()))
+		// Try to extract error message from response body
+		errorMsg := fmt.Sprintf("HTTP %d", createResult.StatusCode())
+		if len(createResult.Body) > 0 {
+			errorMsg = fmt.Sprintf("HTTP %d: %s", createResult.StatusCode(), string(createResult.Body))
+		}
+		resp.Diagnostics.AddError("Unable to create cluster", errorMsg)
 		return
 	}
 	if createResult.JSON200 == nil {
 		resp.Diagnostics.AddError("Unable to create cluster", "cluster is nil")
 		return
 	}
+
+	// Calculate timeout based on node count (10-20 minutes)
+	attempts := calculateRetryAttempts(data.NodeCount.ValueInt64())
 
 	err = retry.Do(
 		func() error {
@@ -290,7 +299,7 @@ func (r *ClusterResource) Create(ctx context.Context, req resource.CreateRequest
 		retry.Context(ctx),
 		retry.Delay(10*time.Second),
 		retry.DelayType(retry.FixedDelay),
-		retry.Attempts(6*5), // 5 minutes
+		retry.Attempts(attempts),
 		retry.RetryIf(func(err error) bool {
 			return err != nil && err.Error() == "cluster is in progress"
 		}),
@@ -375,6 +384,9 @@ func (r *ClusterResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	// watch for resizing update if node count is different
 	if defaultNodePool.NodeCount != data.NodeCount.ValueInt64() {
+		// Calculate timeout based on new node count (10-20 minutes)
+		attempts := calculateRetryAttempts(data.NodeCount.ValueInt64())
+
 		err = retry.Do(
 			func() error {
 				showResult, err := r.client.ShowNodePoolWithResponse(ctx, defaultNodePool.ClusterID, defaultNodePool.Id, &sdk.ShowNodePoolParams{})
@@ -403,7 +415,7 @@ func (r *ClusterResource) Update(ctx context.Context, req resource.UpdateRequest
 			retry.Context(ctx),
 			retry.Delay(10*time.Second),
 			retry.DelayType(retry.FixedDelay),
-			retry.Attempts(6*5), // 5 minutes
+			retry.Attempts(attempts),
 			retry.RetryIf(func(err error) bool {
 				return err != nil && err.Error() == "node pool is in resizing state"
 			}),
@@ -448,6 +460,7 @@ func (r *ClusterResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
+	// Use 10 minute timeout for deletion (independent of node count)
 	err = retry.Do(
 		func() error {
 			showResult, err := r.client.ShowClusterWithResponse(ctx, data.Id.ValueString(), &sdk.ShowClusterParams{})
@@ -482,7 +495,7 @@ func (r *ClusterResource) Delete(ctx context.Context, req resource.DeleteRequest
 		retry.Context(ctx),
 		retry.DelayType(retry.FixedDelay),
 		retry.Delay(10*time.Second),
-		retry.Attempts(6*5), // 5 minutes
+		retry.Attempts(60), // 10 minutes
 		retry.RetryIf(func(err error) bool {
 			return err != nil && err.Error() == "cluster is in deleting state"
 		}),
@@ -496,6 +509,20 @@ func (r *ClusterResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 func (r *ClusterResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// calculateRetryAttempts calculates the number of retry attempts based on node count
+// Provides 10 minutes for small clusters (≤3 nodes), 20 minutes for larger clusters
+func calculateRetryAttempts(nodeCount int64) uint {
+	// Base: 10 minutes = 60 attempts × 10 seconds
+	baseAttempts := uint(60)
+
+	// Add 10 more minutes (60 attempts) for clusters with more than 3 nodes
+	if nodeCount > 3 {
+		return baseAttempts + 60 // 20 minutes total
+	}
+
+	return baseAttempts // 10 minutes
 }
 
 func (r *ClusterResource) readCluster(ctx context.Context, id string, data *ClusterResourceModel) error {

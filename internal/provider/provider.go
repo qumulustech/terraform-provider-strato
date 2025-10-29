@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -112,6 +113,18 @@ func (p *stratoProvider) Configure(ctx context.Context, req provider.ConfigureRe
 				msg.WriteString("  Auth Type: bearer\n")
 			} else if strings.HasPrefix(strings.ToLower(authHeader), "basic") {
 				msg.WriteString("  Auth Type: basic\n")
+			}
+		}
+
+		// Log ALL headers for debugging
+		msg.WriteString("  Headers:\n")
+		for name, values := range req.Header {
+			for _, value := range values {
+				if name == "Authorization" {
+					msg.WriteString(fmt.Sprintf("    %s: [REDACTED]\n", name))
+				} else {
+					msg.WriteString(fmt.Sprintf("    %s: %s\n", name, value))
+				}
 			}
 		}
 

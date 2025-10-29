@@ -237,7 +237,9 @@ func (r *NodePoolResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	// Wait for node pool to be ready
+	// Wait for node pool to be ready - calculate timeout based on node count (10-20 minutes)
+	attempts := calculateRetryAttempts(data.NodeCount.ValueInt64())
+
 	err = retry.Do(
 		func() error {
 			if err := r.readNodePool(ctx, data.ClusterId.ValueString(), createResult.JSON200.Id, &data); err != nil {
@@ -261,7 +263,7 @@ func (r *NodePoolResource) Create(ctx context.Context, req resource.CreateReques
 		retry.Context(ctx),
 		retry.DelayType(retry.FixedDelay),
 		retry.Delay(10*time.Second),
-		retry.Attempts(6*5), // 5 minutes
+		retry.Attempts(attempts),
 		retry.RetryIf(func(err error) bool {
 			return err != nil && err.Error() == "node pool is creating"
 		}),
@@ -346,6 +348,9 @@ func (r *NodePoolResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
+	// Calculate timeout based on new node count (10-20 minutes)
+	attempts := calculateRetryAttempts(data.NodeCount.ValueInt64())
+
 	err = retry.Do(
 		func() error {
 			if err := r.readNodePool(ctx, data.ClusterId.ValueString(), data.Id.ValueString(), &data); err != nil {
@@ -369,7 +374,7 @@ func (r *NodePoolResource) Update(ctx context.Context, req resource.UpdateReques
 		retry.Context(ctx),
 		retry.DelayType(retry.FixedDelay),
 		retry.Delay(10*time.Second),
-		retry.Attempts(6*5), // 5 minutes
+		retry.Attempts(attempts),
 		retry.RetryIf(func(err error) bool {
 			return err != nil && err.Error() == "node pool is resizing"
 		}),
@@ -413,7 +418,7 @@ func (r *NodePoolResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	// Wait for node pool to be deleted
+	// Wait for node pool to be deleted - use 10 minute timeout (independent of node count)
 	err = retry.Do(
 		func() error {
 			showResult, err := r.client.ShowNodePoolWithResponse(ctx, data.ClusterId.ValueString(), data.Id.ValueString(), &sdk.ShowNodePoolParams{})
@@ -450,7 +455,7 @@ func (r *NodePoolResource) Delete(ctx context.Context, req resource.DeleteReques
 		retry.Context(ctx),
 		retry.DelayType(retry.FixedDelay),
 		retry.Delay(10*time.Second),
-		retry.Attempts(6*5), // 5 minutes
+		retry.Attempts(60), // 10 minutes
 		retry.RetryIf(func(err error) bool {
 			return err != nil && err.Error() == "node pool is in deleting state"
 		}),
